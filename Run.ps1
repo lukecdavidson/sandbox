@@ -94,6 +94,5 @@ Process
     }
 
     $xml.Save("$PSScriptRoot\Sandbox.wsb")
-    #notepad.exe "$PSScriptRoot\Sandbox.wsb"
     WindowsSandbox.exe "$PSScriptRoot\Sandbox.wsb"
 }
