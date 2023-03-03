@@ -1,6 +1,9 @@
 function sandbox {
     [CmdletBinding(DefaultParameterSetName='x')]
     Param (
+        [ValidateScript({$_.EndsWith(".wsb")})]
+        [string]$Path = "$env:Temp\Sandbox.wsb",
+
         [ValidateScript({
     	foreach ($v in $_) {
     		$vArgs = $v.split(";")
@@ -93,7 +96,7 @@ function sandbox {
             $xml.Configuration.ClipboardRedirection= if ($ClipboardRedirection) {"Default"} else {"Disable"}
         }
     
-        $xml.Save("$PSScriptRoot\Sandbox.wsb")
-        WindowsSandbox.exe "$PSScriptRoot\Sandbox.wsb"
+        $xml.Save($Path)
+        WindowsSandbox.exe $Path
     }
 }
