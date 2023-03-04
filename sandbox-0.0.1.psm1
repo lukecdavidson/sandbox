@@ -10,7 +10,7 @@ function sandbox {
     		if ((Test-Path $vArgs[0]) -eq $False) {
     			throw [System.IO.DirectoryNotFoundException]::new("Host path $($vArgs[0]) not found. Please specify a valid host folder for the volume mapping.")
     		}
-    		if (($vArgs[1].StartsWith("C:\")) -eq $False) {
+    		if (($vArgs[1].ToUpper().StartsWith("C:\")) -eq $False) {
     			throw [System.IO.DirectoryNotFoundException]::new("Sandbox path $($vArgs[1]) is invalid. Please specify a full path for the sandbox folder.")
     		}
     		if ($vArgs.Length -eq 3) {
