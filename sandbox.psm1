@@ -1,25 +1,49 @@
-function sandbox {
+<#PSScriptInfo
+.VERSION 2.0
+.AUTHOR luke@lukedavidson.org
+.COPYRIGHT 2023 Luke Davidson. All rights reserved.
+.LICENSEURI https://github.com/lukecdavidson/sandbox/blob/master/LICENSE
+.PROJECTURI https://github.com/lukecdavidson/sandbox
+#>
+function Approve-VolumesMap {
+    param([hashtable[]]$Volumes)
+
+    foreach ($Volume in $Volumes) {
+        if ($Volume.Keys -notcontains "Host") {
+            throw 'Host folder definition missing from volume mapping dictionary.'
+        }
+        if ($Volume.Keys -notcontains "Container") {
+            throw 'Container folder definition missing from volume mapping dictionary.'
+        }
+        if (-not (Test-Path -PathType Container -Path $($Volume['Host']))) {
+            throw "Path $($Volume['Host']) does not exist. Please specify an existing host folder to map."
+        }
+        if (-not ($($Volume['container']).ForEach({$_.ToUpper().startswith('C:\')}))) {
+            throw "Path $($Volume['container']) is invalid. Please specify a path on C:\ for the container folder."
+        }
+    }
+    return $true
+}
+
+function Start-Sandbox {
+    <#
+    .SYNOPSIS
+    Starts Windows Sandbox
+    .DESCRIPTION
+    PowerShell wrapper that builds the configuration XML for Windows Sandbox and executes.
+    .EXAMPLE
+    Start-Sandbox -Volume @{'Host'=$pwd; 'Container'='C:\Data'; 'Write'=$true}, @{'Host'='D:\mycode'; 'Container'='C:\mycode'} -Networking $false
+    #>
+    
     [CmdletBinding(DefaultParameterSetName='x')]
     Param (
-        [ValidateScript({$_.EndsWith(".wsb")})]
-        [string]$Path = "$env:Temp\Sandbox.wsb",
+        [ValidateScript({$_.ToLower().EndsWith(".wsb")})]
+        [string]
+        $Path = "$env:Temp\Sandbox.wsb",
 
-        [ValidateScript({
-    	foreach ($v in $_) {
-    		$vArgs = $v.split(";")
-    		if ((Test-Path $vArgs[0]) -eq $False) {
-    			throw [System.IO.DirectoryNotFoundException]::new("Host path $($vArgs[0]) not found. Please specify a valid host folder for the volume mapping.")
-    		}
-    		if (($vArgs[1].ToUpper().StartsWith("C:\")) -eq $False) {
-    			throw [System.IO.DirectoryNotFoundException]::new("Sandbox path $($vArgs[1]) is invalid. Please specify a full path for the sandbox folder.")
-    		}
-    		if ($vArgs.Length -eq 3) {
-    			if ($vArgs[2] -notin "RW", "RO") {throw "Volume mode $($vArgs[2]) is invalid. Specify 'RW' or 'RO' for the volume mode."}
-       		}
-    		return $True
-    	}
-        })]
-        [array]$Volume,
+        [ValidateScript({Approve-VolumesMap -Volumes $_})]
+        [hashtable[]]
+        $Volumes,
     
         [parameter(ParameterSetName="RunCommand")]
         [string]
@@ -41,20 +65,19 @@ function sandbox {
     {
         $xml = [xml]::new()
         $xml.AppendChild($xml.CreateElement("Configuration")) | Out-Null
-        if ($null -ne $Volume) {
-    		$xml.SelectSingleNode("Configuration").AppendChild($xml.CreateElement("MappedFolders")) | Out-Null
-    		foreach ($i in $Volume) {
-            	$VolumeArgs = $i.split(";")
-    			$xml.SelectSingleNode("//MappedFolders").AppendChild($xml.CreateElement("MappedFolder")) | Out-Null
-    			$MappedFolder = $xml.SelectNodes("//MappedFolder")[$Volume.IndexOf($i)]
-    			foreach ($Child in "HostFolder", "SandboxFolder", "ReadOnly") {
-    				$MappedFolder.AppendChild($xml.CreateElement($Child)) | Out-Null
-    			}
+        if ($null -ne $Volumes) {
+    		    $xml.SelectSingleNode("Configuration").AppendChild($xml.CreateElement("MappedFolders")) | Out-Null
+    		    foreach ($Volume in $Volumes) {	
+    			      $xml.SelectSingleNode("//MappedFolders").AppendChild($xml.CreateElement("MappedFolder")) | Out-Null
+    			      $MappedFolder = $xml.SelectNodes("//MappedFolder")[$Volumes.IndexOf($Volume)]
+    			      foreach ($Child in "HostFolder", "SandboxFolder", "ReadOnly") {
+    				        $MappedFolder.AppendChild($xml.CreateElement($Child)) | Out-Null
+    			      }
     
-    			$MappedFolder.HostFolder = $VolumeArgs[0]
-    			$MappedFolder.SandboxFolder = $VolumeArgs[1]
-    			$MappedFolder.ReadOnly = if ($VolumeArgs.Length -eq 2) {"True"} elseif ($VolumeArgs[2] -eq "RW") {"False"}
-        	}
+    			      $MappedFolder.HostFolder = $Volume['Host']
+    			      $MappedFolder.SandboxFolder = $Volume['Container']
+    			      $MappedFolder.ReadOnly = if ($null -eq $Volume['Write']) {"True"} elseif ($Volume['Write'] -eq $true) {"False"}
+        	  }
         }
         if ($RunCommand -ne ""){
     		$xml.SelectSingleNode("Configuration").AppendChild($xml.CreateElement("LogonCommand")) | Out-Null
@@ -100,3 +123,6 @@ function sandbox {
         WindowsSandbox.exe $Path
     }
 }
+
+New-Alias -Name sandbox -Value Start-Sandbox
+Export-ModuleMember -Function Start-Sandbox -Alias sandbox
